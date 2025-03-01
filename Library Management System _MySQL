@@ -1,0 +1,158 @@
+CREATE DATABASE LibraryManagementSystem;
+USE LibraryManagementSystem;
+/*---------------------------------------------------------------------------*/
+CREATE INDEX idx_title ON books (Title);
+CREATE INDEX idx_member_name ON members (Name);
+
+/*---------------------- Create Books Table ----------------------*/
+CREATE TABLE books (
+    Book_id INT PRIMARY KEY AUTO_INCREMENT,
+    Title VARCHAR(100) UNIQUE,
+    Author VARCHAR(100) UNIQUE,
+    Genre VARCHAR(100),
+    Published_year INT UNIQUE,   
+    Available_copies INT
+);
+
+
+
+/* Insert Sample Data */
+INSERT INTO books (Title, Author, Genre, Published_year, Available_copies)
+VALUES
+('To Kill a Mockingbird', 'Harper Lee', 'Fiction', 1960, 3),
+('The Great Gatsby', 'F. Scott Fitzgerald', 'Classic', 1925, 4),
+('Moby-Dick', 'Herman Melville', 'Adventure', 1851, 2),
+('Pride and Prejudice', 'Jane Austen', 'Romance', 1813, 6);
+
+/* Stored Procedure for Adding Books */
+DELIMITER \\
+
+CREATE PROCEDURE InsertBooks (
+    IN T VARCHAR(100),
+    IN A VARCHAR(100),
+    IN G VARCHAR(100),
+    IN P INT,
+    IN AC INT
+)
+BEGIN
+    INSERT INTO books (Title, Author, Genre, Published_year, Available_copies) 
+    VALUES (T, A, G, P, AC);
+END \\
+
+DELIMITER ;
+
+/* Insert New Book into Books Table */
+CALL InsertBooks('Fourth Wing', 'Rebecca Yarros', 'Fantasy', 2023, 3);
+
+/*-------------------------------------------------------*/
+
+/*---------------------- Create Members Table ----------------------*/
+CREATE TABLE Members (
+    Member_id INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(100) UNIQUE,
+    Join_date DATE
+);
+
+
+/* Insert Sample Data */
+INSERT INTO members (Name, Join_date)
+VALUES 
+('Amit Sharma', '2022-05-12'),
+('Priya Verma', '2021-08-21'),
+('Rahul Nair', '2023-01-15'),
+('Sneha Patel', '2020-11-30'),
+('Vikram Reddy', '2022-07-19'),
+('Kiran Rao', '2019-09-05');
+
+/* Stored Procedure for Adding Members */
+DELIMITER \\
+
+CREATE PROCEDURE InsertMember(
+    IN N VARCHAR(100),
+    IN J DATE
+)
+BEGIN
+    INSERT INTO members (Name, Join_date) VALUES (N, J);
+END \\
+
+DELIMITER ;
+
+/* Insert New MEMBER into MEMBERS Table */
+CALL InsertMember('VASANTH', current_date());
+
+/*-------------------------------------------------------*/
+
+
+/*---------------------- Create Borrow_Book Table ----------------------*/
+CREATE TABLE borrow_book (
+    Borrow_id INT PRIMARY KEY AUTO_INCREMENT,
+    Book_id INT,
+    Member_id INT,    
+    Borrow_date DATE,
+    Return_date DATE,
+    CONSTRAINT fk_book FOREIGN KEY (Book_id) REFERENCES books(Book_id) 
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_member FOREIGN KEY (Member_id) REFERENCES members(Member_id) 
+        ON DELETE CASCADE ON UPDATE CASCADE
+);
+/*---------------------- Triggers for Book Borrowing ----------------------*/
+/* Reduce Available Copies */
+DELIMITER \\
+
+CREATE TRIGGER Reduce_AC 
+BEFORE INSERT ON borrow_book 
+FOR EACH ROW
+BEGIN
+    DECLARE available INT;
+    SELECT Available_copies INTO available FROM books WHERE Book_id = NEW.Book_id;
+    
+    IF available <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: No available copies to borrow';
+    ELSE
+        UPDATE books 
+        SET Available_copies = Available_copies - 1 
+        WHERE Book_id = NEW.Book_id;
+    END IF;
+END \\
+
+DELIMITER ;
+
+
+-------------------------------------
+/* Restore Available Copies */
+DELIMITER \\
+
+CREATE TRIGGER restore_available_copies
+BEFORE UPDATE ON borrow_book
+FOR EACH ROW
+BEGIN
+    IF OLD.return_date IS NULL AND NEW.return_date IS NOT NULL THEN
+        UPDATE books 
+        SET available_copies = available_copies + 1 
+        WHERE book_id = NEW.book_id;
+    END IF;
+END \\
+
+DELIMITER ;
+
+/*-------------------------------------------------------*/
+/* Insert Sample Borrowing Record */
+SET @book_id = (SELECT Book_id FROM books WHERE Title = 'Moby-Dick' LIMIT 1);
+
+INSERT INTO borrow_book (Book_id, Member_id, Borrow_date, Return_date)
+VALUES (@book_id, 3, '2024-09-04', NULL);
+
+
+SELECT * FROM books; /*check output at book table in available_column*/
+---------------
+/* Update Return Date */
+UPDATE borrow_book 
+SET return_date = '2024-10-02' 
+WHERE Borrow_id = 1;
+
+-------------------------------------------------------------
+/* Check Tables */
+SELECT * FROM books;
+SELECT * FROM members;
+SELECT * FROM borrow_book;
